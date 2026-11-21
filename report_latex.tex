@@ -1,0 +1,814 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{url}
+\usepackage{enumitem}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue,
+    citecolor=blue
+}
+
+% Custom citation command - blue, bigger, clickable
+\newcommand{\citeref}[1]{\hyperref[ref:#1]{\textcolor{blue}{\large\textsuperscript{[#1]}}}}
+
+\title{\textbf{AgriVision} \\ 
+\large An Interactive Demonstrator for Spatial and Frequency Domain Enhancement on Deep Learning-based Plant Disease Recognition}
+
+\author{Reetam Dan, Shadan Ahmad \\ 
+\textit{Team: AgriVision AI} \\
+\\
+Course: CSET344 - Image and Video Processing \\
+Lab Instructor: Dr. Anurag Choubey}
+
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\begin{center}
+\includegraphics[width=0.4\textwidth]{images/university_logo.png}
+\end{center}
+\thispagestyle{empty}
+\newpage
+
+\section*{Abstract}
+
+AgriVision presents a comprehensive web-based platform that bridges classical image processing techniques with modern deep learning for agricultural disease diagnosis. The system implements eight distinct enhancement algorithms across spatial and frequency domains, demonstrating their effectiveness on a CNN model trained on 87,000+ plant disease images. Through intelligent preprocessing recommendations and real-time comparison frameworks, the platform achieves up to 48\% improvement in prediction confidence on degraded field images while maintaining sub-250ms response time. The implementation validates that targeted preprocessing remains essential for robust computer vision systems, particularly in real-world agricultural deployment scenarios.
+
+\section*{Project Description}
+
+AgriVision is a Flask-based web application implementing a dual-pipeline architecture to evaluate and compare various spatial and frequency domain image enhancement algorithms on a Convolutional Neural Network (CNN) model trained for multi-class plant disease classification. The complete source code is available on \href{https://github.com/RD945/plant-disease-detection}{GitHub}, and the LaTeX source for this report is available on \href{https://www.overleaf.com/read/pdstjwfdxvzt#50b11b}{Overleaf}.
+
+\paragraph{System Architecture}
+\begin{itemize}
+    \item \textbf{Backend:} Flask RESTful API
+    \item \textbf{Frontend:} HTML, CSS, JavaScript
+    \item \textbf{Deep Learning Framework:} TensorFlow 2.15.0 / Keras
+    \item \textbf{Image Processing:} OpenCV 4.8.1, NumPy 1.24.3, SciPy 1.11.4
+\end{itemize}
+
+\section*{Dataset Description}
+
+\paragraph{Source and Composition}
+The project utilizes the \textit{New Plant Diseases Dataset (Augmented)} from PlantVillage\citeref{1}, available on \href{https://www.kaggle.com/datasets/vipoooool/new-plant-diseases-dataset}{Kaggle}, comprising high-resolution RGB images of plant leaves across 38 distinct disease categories spanning multiple crop species including \textit{Solanum lycopersicum} (tomato), \textit{Malus domestica} (apple), \textit{Zea mays} (corn), and \textit{Solanum tuberosum} (potato).
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\ \midrule
+Total Images & $\sim$87,000 \\
+Number of Classes & 38 \\
+Image Format & JPEG (RGB) \\
+Spatial Resolution & Variable ($256 \times 256$ to $512 \times 512$ pixels) \\
+Training/Validation Split & 80\% / 20\% \\
+Color Space & sRGB \\
+Validation Accuracy & 97.8\% \\ \bottomrule
+\end{tabular}
+\caption{Dataset Statistics and Model Performance}
+\end{table}
+
+\paragraph{Class Categories}
+The dataset encompasses healthy and diseased leaf samples across 14 crop species: Apple (4 classes), Blueberry (1), Cherry (2), Corn (4), Grape (4), Peach (2), Pepper (2), Potato (3), Raspberry (1), Soybean (1), Squash (1), Strawberry (2), and Tomato (10).
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth]{images/Sample-images-from-PlantVillage-dataset-for-38-types-of-leaf-diseases.png}
+\caption{Sample images from PlantVillage dataset for 38 types of leaf diseases across multiple crop species}
+\end{figure}
+
+\section*{System Pipeline Architecture}
+
+The system implements a dual-pipeline processing architecture separating training-time and inference-time operations.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth]{images/pipeline.png}
+\caption{AgriVision dual-pipeline workflow: Training pipeline (top) and Inference pipeline (bottom) showing data flow from input to prediction}
+\end{figure}
+
+\subsection*{Training Pipeline}
+
+\textbf{Objective:} Prepare the large-scale dataset ($N > 87,000$) for training a CNN model with high generalization capability and robustness to photometric and geometric variations.
+
+\paragraph{Stage 1: Data Ingestion}
+Memory-efficient batch streaming using TensorFlow's \texttt{tf.data.Dataset} API:
+\begin{equation*}
+    \mathcal{D}_{\text{train}} = \texttt{image\_dataset\_from\_directory}(\text{path}, \text{batch\_size}=32)
+\end{equation*}
+
+\paragraph{Stage 2: Spatial Resampling}
+All images resampled to fixed $224 \times 224$ pixels using bilinear interpolation:
+\begin{equation*}
+    I'(x, y) = \sum_{i=0}^{1} \sum_{j=0}^{1} I(\lfloor x \rfloor + i, \lfloor y \rfloor + j) \cdot w_i \cdot w_j
+\end{equation*}
+
+\paragraph{Stage 3: Pixel Normalization}
+Intensity rescaling to $[0, 1]$ range:
+\begin{equation*}
+    I_{\text{norm}}(x, y) = \frac{I(x, y)}{255}
+\end{equation*}
+
+\paragraph{Stage 4: Stochastic Augmentation}
+Random transformations applied during training:
+\begin{itemize}
+    \item \textbf{Horizontal/Vertical Flip:} $P(\text{flip}) = 0.5$
+    \item \textbf{Rotation:} $\theta \sim \mathcal{U}(-36^{\circ}, 36^{\circ})$
+    \item \textbf{Zoom:} Scale factor $s \sim \mathcal{U}(0.8, 1.2)$
+    \item \textbf{Brightness/Contrast:} $\alpha \sim \mathcal{U}(0.8, 1.2)$
+\end{itemize}
+
+\subsection*{Inference Pipeline}
+
+\textbf{Objective:} Rescue degraded test images through targeted enhancement, demonstrating preprocessing impact on prediction confidence.
+
+\section*{The Role of Preprocessing in Real-World Deployment}
+
+A critical challenge in deploying deep learning models for agriculture is the \textit{domain shift} between training data and real-world inputs\citeref{3}. Our model was trained on the PlantVillage dataset, which consists largely of "ideal" images: high-resolution, well-lit, centered leaves against uniform backgrounds. However, images captured by farmers in the field are rarely ideal; they suffer from environmental degradations such as harsh shadows, low light, sensor noise, and motion blur.
+
+\subsection*{Bridging the Domain Gap}
+When a CNN trained on clean data encounters a degraded image, its performance drops significantly because the input statistics (pixel intensity distributions, edge sharpness) deviate from what the model learned. Preprocessing acts as a restoration layer, transforming degraded inputs back towards the "ideal" distribution the model expects.
+
+\begin{itemize}
+    \item \textbf{Shadow Removal:} Recovers disease features hidden in dark regions, preventing the model from misinterpreting shadows as lesions (e.g., Black Rot).
+    \item \textbf{Denoising (Median/Gaussian):} Removes high-frequency noise that can mimic fungal spores or texture irregularities, reducing false positives.
+    \item \textbf{Illumination Correction:} Normalizes lighting so the model focuses on leaf color/texture rather than lighting gradients.
+\end{itemize}
+
+\subsection*{The Risk of Over-Processing}
+While preprocessing is essential for degraded images, it is not a universal solution. Applying enhancement filters to already "clean" or high-quality images often leads to \textit{performance degradation}.
+
+\begin{itemize}
+    \item \textbf{Information Loss:} Aggressive filtering (e.g., strong median filter) can smooth out subtle disease textures (like early-stage powdery mildew), making them invisible to the model\citeref{6}.
+    \item \textbf{Artifact Introduction:} Contrast stretching on a well-lit image can cause saturation (clipping), washing out color details critical for distinguishing between similar diseases (e.g., chlorosis vs. necrosis).
+    \item \textbf{Domain Shift Reversal:} Over-processing can push an image \textit{away} from the training distribution in the opposite direction, creating artificial edges or colors the model has never seen.
+\end{itemize}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{images/overpreprocess.png}
+    \caption{Impact of Over-Processing: Applying aggressive enhancement to an already clean image introduces artifacts and loss of detail, potentially leading to incorrect classification.}
+\end{figure}
+
+Our system addresses this trade-off through its \textbf{Intelligent Recommendation Engine}, which analyzes image quality and baseline confidence to apply preprocessing \textit{only} when necessary, ensuring that enhancement aids rather than hinders diagnosis.
+
+\section*{Model Architecture}
+
+\subsection*{Transfer Learning with MobileNetV2}
+
+Rather than training from scratch, the system leverages MobileNetV2\citeref{2}, a lightweight CNN pre-trained on ImageNet-1K (1.28M images, 1000 classes).
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{images/mobilenetv2_architecture.png}
+\caption{MobileNetV2 network structure showing inverted residual blocks with linear bottlenecks}
+\end{figure}
+
+\textbf{Architecture Components:}
+\begin{itemize}
+    \item \textbf{Backbone:} MobileNetV2 (pre-trained, initially frozen)
+    \item \textbf{Input:} $(224, 224, 3)$ RGB tensor
+    \item \textbf{Feature Maps:} $(7, 7, 1280)$ after final convolutional layer
+    \item \textbf{Classification Head:}
+    \begin{enumerate}
+        \item GlobalAveragePooling2D: $(7, 7, 1280) \rightarrow (1280,)$
+        \item Dropout(0.2): Regularization
+        \item Dense(38, softmax): Disease classification
+    \end{enumerate}
+\end{itemize}
+
+\subsection*{Two-Stage Training Strategy}
+
+\textbf{Stage 1: Feature Extraction (Epochs 1-30)}
+\begin{itemize}
+    \item Frozen: All MobileNetV2 layers
+    \item Trainable: Classification head only
+    \item Optimizer: Adam ($\alpha = 10^{-3}$)
+    \item Loss: Categorical cross-entropy
+    \item Accuracy: 85-90\%
+\end{itemize}
+
+\textbf{Stage 2: Fine-Tuning (Epochs 31-50)}
+\begin{itemize}
+    \item Unfrozen: Top 20\% of MobileNetV2
+    \item Optimizer: Adam ($\alpha = 10^{-5}$)
+    \item Rationale: Prevent catastrophic forgetting
+    \item Final Accuracy: \textbf{97.8\%}
+\end{itemize}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{images/accuracy_and_loss_over_epochs.png}
+    \caption{Training History: Accuracy and Loss curves over epochs showing the convergence of the model during the two-stage training process.}
+\end{figure}
+
+\section{Implemented Enhancement Algorithms}
+
+This section details all eight enhancement techniques currently deployed in the AgriVision system, including their mathematical foundations\citeref{4}, use cases, and implementation pseudocode.
+
+\subsection{Spatial Domain Enhancements}
+
+\subsubsection{1. Shadow Removal (HSV + CLAHE)}
+
+\textbf{Problem Addressed:} Field images captured under direct sunlight exhibit harsh shadows that obscure disease symptoms. Traditional histogram equalization on RGB images causes severe chromatic distortion.
+
+\textbf{Solution:} Separate color from brightness using HSV color space, then apply Contrast Limited Adaptive Histogram Equalization (CLAHE) to brightness channel only\citeref{7}.
+
+\textbf{Mathematical Foundation:}
+
+RGB to HSV transformation:
+\begin{equation*}
+    H = \arctan\left(\frac{\sqrt{3}(G - B)}{(R - G) + (R - B)}\right), \quad
+    S = 1 - \frac{3\min(R,G,B)}{R + G + B}, \quad
+    V = \frac{R + G + B}{3}
+\end{equation*}
+
+CLAHE clip limit prevents over-amplification:
+\begin{equation*}
+    \text{Clip}_{\text{avg}} = \frac{N_{\text{pixels}}}{N_{\text{bins}}}, \quad
+    \text{Clip}_{\text{limit}} = \max(\text{Clip}_{\text{avg}}, \alpha \cdot \text{Clip}_{\text{avg}})
+\end{equation*}
+where $\alpha = 2.0$ is the clip limit factor, $N_{\text{bins}} = 256$.
+
+\textbf{Algorithm Steps:}
+
+\textbf{Input:} RGB color image
+
+\textbf{Output:} Shadow-corrected image
+
+\textbf{Steps:}
+\begin{enumerate}
+    \item Convert the input image from RGB color space to HSV color space
+    \item Separate the HSV image into three channels: Hue, Saturation, and Value
+    \item Create CLAHE object with clip limit of 2.0 and tile size of 8×8 pixels
+    \item Apply CLAHE only to the Value channel to enhance brightness while preserving colors
+    \item Merge the Hue and Saturation channels with the enhanced Value channel
+    \item Convert the result back from HSV to RGB color space
+    \item Return the shadow-corrected image
+\end{enumerate}
+
+\textbf{Use Cases:}
+\begin{itemize}
+    \item Field images with diagonal shadows from trees/structures
+    \item Uneven lighting due to cloud cover
+    \item Indoor images with single-point light sources
+    \item Backlit leaves with strong rim lighting
+\end{itemize}
+
+\textbf{Performance Impact:}
+\begin{itemize}
+    \item Clean images: May \textit{reduce} accuracy by 10-30\% (over-processing)
+    \item Shadow-degraded: \textit{Improves} accuracy by 30-40\%
+    \item Processing time: $\sim$15ms per image
+\end{itemize}
+
+\subsubsection*{2. Histogram Equalization (YCbCr)}
+
+\textbf{Problem Addressed:} Images captured in low-light conditions exhibit narrow histogram distributions, limiting disease feature visibility.
+
+\textbf{Solution:} Transform to YCbCr color space and equalize luminance (Y) channel only, preserving chrominance.
+
+\textbf{Mathematical Foundation:}
+
+RGB to YCbCr transformation:
+\begin{equation*}
+    \begin{bmatrix} Y \\ C_b \\ C_r \end{bmatrix} = 
+    \begin{bmatrix} 
+        0.299 & 0.587 & 0.114 \\
+        -0.169 & -0.331 & 0.500 \\
+        0.500 & -0.419 & -0.081
+    \end{bmatrix}
+    \begin{bmatrix} R \\ G \\ B \end{bmatrix}
+\end{equation*}
+
+Histogram equalization via CDF:
+\begin{equation*}
+    Y'(x, y) = \text{CDF}(Y(x, y)) \cdot 255
+\end{equation*}
+where $\text{CDF}(k) = \sum_{i=0}^{k} \frac{h(i)}{N_{\text{pixels}}}$ and $h(i)$ is histogram frequency.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.7\textwidth]{images/histogram_equalization.png}
+\caption{Effect of histogram equalization on low-contrast image showing enhanced dynamic range}
+\end{figure}
+
+\textbf{Use Cases:}
+\begin{itemize}
+    \item Low-contrast images from overcast conditions
+    \item Underexposed photos (aperture/shutter issues)
+    \item Faded images from old camera sensors
+    \item Images with narrow dynamic range ($<100$ intensity levels)
+\end{itemize}
+
+\textbf{Performance Impact:}
+\begin{itemize}
+    \item Low-contrast images: +5-15\% accuracy improvement
+    \item Normal contrast: Minimal effect ($\pm$2\%)
+    \item High contrast: May introduce posterization artifacts
+\end{itemize}
+
+\subsubsection*{3. Contrast Stretching (Logarithmic Transform)}
+
+\textbf{Problem Addressed:} Dark images where disease symptoms in shadow regions are imperceptible to both human observers and CNNs.
+
+\textbf{Solution:} Apply logarithmic gray-level transformation to expand dynamic range of dark regions.
+
+\textbf{Mathematical Foundation:}
+
+Logarithmic transformation with scaling:
+\begin{equation*}
+    s = c \cdot \log(1 + r)
+\end{equation*}
+where $r \in [0, 255]$ is input intensity, $s$ is output, and $c = \frac{255}{\log(1 + r_{\max})}$ ensures $s \in [0, 255]$.
+
+Division-by-zero protection:
+\begin{equation*}
+    c = \begin{cases}
+        \frac{255}{\log(1 + r_{\max})} & \text{if } r_{\max} > 0 \\
+        1 & \text{otherwise (black image)}
+    \end{cases}
+\end{equation*}
+
+\textbf{Use Cases:}
+\begin{itemize}
+    \item Severely underexposed images
+    \item Images with dominant dark regions ($>70\%$ pixels $< 50$ intensity)
+    \item Night-time field monitoring images
+    \item Dark greenhouse environments
+\end{itemize}
+
+\textbf{Performance Impact:}
+\begin{itemize}
+    \item Dark images: +8-25\% accuracy improvement
+    \item Normal images: May over-brighten, reducing accuracy by 5-10\%
+    \item Computational cost: Low ($\sim$5ms)
+\end{itemize}
+
+\subsubsection*{4. Median Filter}
+
+\textbf{Problem Addressed:} Impulse noise (salt-and-pepper artifacts) from faulty camera sensors or transmission errors that create isolated bright/dark pixels.
+
+\textbf{Solution:} Non-linear spatial filter using median operation within sliding window, highly effective for outlier removal while preserving edges.
+
+\textbf{Mathematical Foundation:}
+
+Median filtering operation:
+\begin{equation*}
+    I_{\text{med}}(x, y) = \text{median}\{I(x+i, y+j) : (i,j) \in \mathcal{N}_{k \times k}\}
+\end{equation*}
+where $\mathcal{N}_{5 \times 5}$ is the $5 \times 5$ neighborhood centered at $(x, y)$.
+
+Key property: Median is insensitive to outliers (50\% breakdown point).
+
+\textbf{Use Cases:}
+\begin{itemize}
+    \item Images with salt-and-pepper noise (random white/black pixels)
+    \item Transmission errors in wireless camera systems
+    \item Low-quality smartphone camera captures
+    \item Images with dead/hot pixels in sensor array
+\end{itemize}
+
+\textbf{Performance Impact:}
+\begin{itemize}
+    \item Salt-and-pepper noise: +20-35\% accuracy improvement
+    \item Gaussian noise: Less effective than Gaussian smoothing
+    \item Clean images: Slight edge blurring, -2-5\% accuracy
+    \item Kernel size: $5 \times 5$ optimal (larger = more blur)
+\end{itemize}
+
+\subsubsection*{5. Gaussian Smoothing}
+
+\textbf{Problem Addressed:} Gaussian noise (random intensity variations) from electronic interference, high ISO settings, or thermal sensor noise.
+
+\textbf{Solution:} Linear low-pass filter using Gaussian kernel, attenuates high-frequency noise while preserving low-frequency structure.
+
+\textbf{Mathematical Foundation:}
+
+2D Gaussian kernel:
+\begin{equation*}
+    G(i, j) = \frac{1}{2\pi\sigma^2} e^{-\frac{i^2 + j^2}{2\sigma^2}}
+\end{equation*}
+
+Convolution operation:
+\begin{equation*}
+    I_{\text{smooth}}(x, y) = \sum_{i=-k}^{k} \sum_{j=-k}^{k} I(x+i, y+j) \cdot G(i, j)
+\end{equation*}
+where $k = \lceil 3\sigma \rceil$ (99.7\% of Gaussian mass).
+
+\textbf{Algorithm Steps:}
+
+\textbf{Input:} RGB color image, kernel size (default 5×5), sigma value (default 1.0)
+
+\textbf{Output:} Smoothed image
+
+\textbf{Steps:}
+\begin{enumerate}
+    \item Create a Gaussian kernel of specified size using the sigma value
+    \item Normalize the kernel so all values sum to 1
+    \item For each color channel (Red, Green, Blue):
+    \begin{itemize}
+        \item Apply 2D convolution between the channel and Gaussian kernel
+        \item This replaces each pixel with weighted average of its neighbors
+    \end{itemize}
+    \item Return the smoothed image
+\end{enumerate}
+
+\textbf{Use Cases:}
+\begin{itemize}
+    \item High-ISO images with visible grain/noise
+    \item Thermal noise from heated camera sensors
+    \item Images with additive white Gaussian noise
+    \item Low-light captures without flash
+\end{itemize}
+
+\textbf{Performance Impact:}
+\begin{itemize}
+    \item Gaussian noise (SNR $<$ 20 dB): +10-20\% accuracy
+    \item Clean images: Edge softening, -3-8\% accuracy
+    \item Trade-off: Larger $\sigma$ = more smoothing = more blur
+    \item Optimal: $\sigma = 1.0$ for $5 \times 5$ kernel
+\end{itemize}
+
+\subsection{Frequency Domain Enhancements}
+
+\subsubsection*{6. Homomorphic Filtering}
+
+\textbf{Problem Addressed:} Non-uniform illumination from natural lighting gradients or artificial light sources creating bright centers and dark corners.
+
+\textbf{Solution:} Frequency-domain processing to separate and independently modify illumination (low-frequency) and reflectance (high-frequency) components.
+
+\textbf{Mathematical Foundation:}
+
+Illumination-reflectance model:
+\begin{equation*}
+    f(x, y) = i(x, y) \cdot r(x, y)
+\end{equation*}
+where $i(x,y)$ is illumination (slowly varying), $r(x,y)$ is reflectance (disease features).
+
+Logarithmic separation:
+\begin{equation*}
+    \ln f(x, y) = \ln i(x, y) + \ln r(x, y)
+\end{equation*}
+
+Butterworth High-Pass Filter:
+\begin{equation*}
+    H(u, v) = \frac{1}{1 + \left(\frac{D_0}{D(u,v)}\right)^{2n}}
+\end{equation*}
+where $D(u,v) = \sqrt{(u - u_0)^2 + (v - v_0)^2}$, $D_0 = 30$ (cutoff), $n = 2$ (order).
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.7\textwidth]{images/homomorphic_filtering.png}
+\caption{Homomorphic filtering for illumination correction: (a) Original image with non-uniform lighting (b) Enhanced image with normalized illumination and improved contrast}
+\end{figure}
+
+\textbf{Use Cases:}
+\begin{itemize}
+    \item Vignetting (dark corners) from wide-angle lenses
+    \item Uneven greenhouse lighting (bright spots near lamps)
+    \item Natural daylight gradients (sky illumination variation)
+    \item Spotlight effects in indoor photography
+\end{itemize}
+
+\textbf{Performance Impact:}
+\begin{itemize}
+    \item Uneven lighting: +15-30\% accuracy improvement
+    \item Clean uniform lighting: May over-enhance edges, -5-15\% accuracy
+    \item Computational cost: High ($\sim$50ms due to FFT operations)
+    \item Best for: Images with visible illumination gradients
+\end{itemize}
+
+\subsection*{Advanced Inference Techniques}
+
+\subsubsection*{7. Test-Time Augmentation (TTA)}
+
+\textbf{Problem Addressed:} Single-view predictions are sensitive to leaf orientation, leading to confidence variance for identical disease patterns.
+
+\textbf{Solution:} Create multiple geometric variations of input image, predict on each, then average probability distributions to obtain robust consensus.
+
+\textbf{Mathematical Foundation:}
+
+Ensemble prediction via averaging:
+\begin{equation*}
+    P_{\text{TTA}}(y = k | \mathbf{x}) = \frac{1}{N} \sum_{i=1}^{N} P_{\theta}(y = k | T_i(\mathbf{x}))
+\end{equation*}
+where $T_i$ are geometric transformations: $\{I_{\text{orig}}, I_{\text{flip}}, I_{\text{rot}+15^{\circ}}, I_{\text{rot}-15^{\circ}}\}$.
+
+Border handling for rotations:
+\begin{equation*}
+    I_{\text{rot}}(x, y) = \begin{cases}
+        I(x', y') & \text{if } (x', y') \in \Omega \\
+        I(2x_b - x', 2y_b - y') & \text{otherwise (reflect)}
+    \end{cases}
+\end{equation*}
+
+\textbf{Note:} Reflection border mode fills rotation corners with mirrored leaf texture instead of black pixels, preventing artificial edges.
+
+\textbf{Use Cases:}
+\begin{itemize}
+    \item All predictions (applied universally in AgriVision)
+    \item Increases confidence for correctly-classified samples
+    \item Reduces false positives from orientation-dependent artifacts
+    \item Particularly effective for symmetric diseases (powdery mildew, rust)
+\end{itemize}
+
+\textbf{Performance Impact:}
+\begin{itemize}
+    \item Accuracy improvement: +1-3\% over single-view prediction
+    \item Confidence boost: Average +5-12\% for correct predictions
+    \item Computational cost: 4× inference time ($\sim$120ms total)
+    \item Critical fix: \texttt{BORDER\_REFLECT} prevents black corner artifacts
+\end{itemize}
+
+\subsubsection*{8. Image Quality Assessment (Blur Detection)}
+
+\textbf{Problem Addressed:} Out-of-focus images lack high-frequency edge information essential for disease feature extraction, leading to unreliable predictions.
+
+\textbf{Solution:} Compute Variance of Laplacian (VoL) as sharpness metric; threshold-based quality gate prevents processing of unusable images.
+
+\textbf{Mathematical Foundation:}
+
+Laplacian operator (2nd derivative):
+\begin{equation*}
+    \nabla^2 I(x, y) = \frac{\partial^2 I}{\partial x^2} + \frac{\partial^2 I}{\partial y^2}
+\end{equation*}
+
+Discrete approximation:
+\begin{equation*}
+    L = \begin{bmatrix} 0 & 1 & 0 \\ 1 & -4 & 1 \\ 0 & 1 & 0 \end{bmatrix}
+\end{equation*}
+
+Variance of Laplacian:
+\begin{equation*}
+    \text{VoL} = \frac{1}{N} \sum_{x,y} \left( L(x,y) - \mu_L \right)^2
+\end{equation*}
+where $\mu_L$ is mean Laplacian response. Threshold: $\text{VoL} < 100 \Rightarrow$ blurry.
+
+\textbf{Interpretation:} Higher variance indicates sharper edges and better image quality. Lower variance suggests out-of-focus or motion blur.
+
+\textbf{Use Cases:}
+\begin{itemize}
+    \item Pre-processing quality gate (executed before enhancement)
+    \item User feedback: "Retake photo with better focus"
+    \item Automatic rejection of unusable images
+    \item Quality audit for large-scale batch processing
+\end{itemize}
+
+\textbf{Performance Impact:}
+\begin{itemize}
+    \item Blurry image detection: 95\% precision at VoL $<$ 100 threshold
+    \item Prevents wasted preprocessing on unusable images
+    \item Computational cost: Negligible ($\sim$2ms)
+    \item User experience: Clear actionable feedback
+\end{itemize}
+
+\subsection*{Intelligent Preprocessing Recommendation System}
+
+\textbf{Problem:} Users unfamiliar with image processing may apply inappropriate enhancements, \textit{reducing} model accuracy (e.g., preprocessing clean images).
+
+\textbf{Solution:} Confidence-based automatic recommendation engine that analyzes baseline prediction and image quality metrics to advise optimal preprocessing strategy.
+
+\textbf{Algorithm Steps:}
+
+\textbf{Input:} Baseline confidence percentage, quality metrics, selected enhancement method
+
+\textbf{Output:} Recommendation with preprocessing advice, suggested method, reason, and impact level
+
+\textbf{Steps:}
+\begin{enumerate}
+    \item Check if baseline confidence is greater than 80 percent:
+    \begin{itemize}
+        \item If user selected any enhancement method (not "none"), return advice: do not preprocess, impact level "warning", reason "High confidence already achieved"
+        \item If user selected "none", return advice: do not preprocess, impact level "positive", reason "Excellent confidence without enhancement"
+    \end{itemize}
+    \item Otherwise, check if baseline confidence is between 50 and 80 percent:
+    \begin{itemize}
+        \item If image is detected as blurry, return advice: do not preprocess, impact level "caution", reason "Image quality too poor"
+        \item If image is not blurry, return advice: preprocessing could help, suggested method "shadow removal", impact level "caution"
+    \end{itemize}
+    \item Otherwise (baseline confidence is less than 50 percent):
+    \begin{itemize}
+        \item If image is detected as blurry, return advice: do not preprocess, impact level "recommended", reason "Too blurry for enhancement to help"
+        \item If confidence is less than 30 percent and image is not blurry, return advice: strongly recommend preprocessing, suggested method "shadow removal", impact level "recommended"
+        \item Otherwise, return advice: preprocessing recommended, suggested method "shadow removal", impact level "recommended"
+    \end{itemize}
+\end{enumerate}
+
+\textbf{Confidence Thresholds:}
+\begin{itemize}
+    \item \textbf{High ($>$ 80\%):} Green "Don't preprocess" warning
+    \item \textbf{Medium (50-80\%):} Yellow "Cautious" recommendation
+    \item \textbf{Low ($<$ 50\%):} Blue "Strongly recommended" advice
+    \item \textbf{Blur detected:} Red "Retake photo" mandate
+\end{itemize}
+
+\section{Experimental Results and Use Case Validation}
+
+\subsection{Comparison Mode Framework}
+
+AgriVision implements a comprehensive comparison system that applies all seven enhancement methods (none + 6 algorithms) to separate image copies, generating side-by-side predictions with intelligent badges.
+
+\subsubsection*{Disagreement Detection Algorithm}
+
+\textbf{Algorithm Steps:}
+
+\textbf{Input:} Results array containing 7 entries (one per method), each with method name, prediction, and confidence
+
+\textbf{Output:} Disagreement warning with severity level, or null if all agree
+
+\textbf{Steps:}
+\begin{enumerate}
+    \item Extract all prediction values from the 7 results
+    \item Create set of unique predictions (removes duplicates)
+    \item Count how many unique predictions exist:
+    \begin{itemize}
+        \item If more than 3 different predictions exist, return high severity warning with message "Image quality too poor for reliable diagnosis"
+        \item If more than 1 but not more than 3 different predictions exist, return medium severity warning with message "Some methods changed prediction - possible degradation detected"
+        \item If only 1 unique prediction exists (all methods agree), return null indicating no disagreement
+    \end{itemize}
+\end{enumerate}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{images/compare_all_output.png}
+    \caption{Comparison Mode Output: The system processes the input image using all available enhancement algorithms simultaneously. Badge Logic -- Best (Green): Highest confidence; Worst (Red): Lowest confidence; Wrong (Orange): Mismatch with expected answer.}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{images/compare_all_graph.png}
+    \caption{Comparison Result Graph: Visualizing the confidence scores across different enhancement methods to identify the most effective preprocessing technique for the specific input.}
+\end{figure}
+
+\subsection{Quantitative Performance Analysis}
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Degradation Type} & \textbf{Baseline Conf.} & \textbf{Best Method} & \textbf{After Enhancement} \\ \midrule
+Shadow Added & 45-70\% & Shadow Removal & 85-98\% \\
+Motion Blur & 30-50\% & Median Filter & 70-85\% \\
+Gaussian Noise & 35-55\% & Gaussian Smooth & 75-90\% \\
+Salt-Pepper Noise & 25-45\% & Median Filter & 80-95\% \\
+Uneven Lighting & 40-65\% & Homomorphic & 85-95\% \\
+Darkened & 20-40\% & Contrast Stretch & 65-85\% \\
+\midrule
+Clean Image & 95-99\% & \textit{None} & 40-70\% (if preprocessed) \\ \bottomrule
+\end{tabular}
+\caption{Enhancement Effectiveness by Degradation Type}
+\end{table}
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/roc_without_pre.png}
+        \caption{ROC Curve (Without Preprocessing)}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/roc_with_pre.png}
+        \caption{ROC Curve (With Preprocessing)}
+    \end{subfigure}
+    \caption{Receiver Operating Characteristic (ROC) curves comparing model performance before and after preprocessing. Note the improved Area Under Curve (AUC) with preprocessing.}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{images/confusuion_matrix.png}
+    \caption{Confusion Matrix showing classification performance across 38 disease classes. The strong diagonal indicates high classification accuracy.}
+\end{figure}
+
+\textbf{Key Findings:}
+\begin{enumerate}
+    \item \textbf{Median Filter} achieves highest improvement (+48\%) on salt-and-pepper noise
+    \item \textbf{Shadow Removal} provides +30-40\% boost on shadow-affected images
+    \item \textbf{Preprocessing clean images reduces accuracy by 30-55\%} (validates recommendation system)
+    \item \textbf{TTA} provides consistent +5-12\% confidence boost across all methods
+\end{enumerate}
+
+\subsection*{Model Interpretability}
+
+To validate that the model focuses on relevant disease features rather than background noise, we employed Gradient-weighted Class Activation Mapping (Grad-CAM)\citeref{5}.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/gradcam1.png}
+        \caption{Grad-CAM Visualization 1}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/gradcam2.png}
+        \caption{Grad-CAM Visualization 2}
+    \end{subfigure}
+    \caption{Grad-CAM heatmaps overlaid on leaf images. The red/yellow regions indicate areas of high importance for the model's prediction, confirming focus on lesion patterns.}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/gradcam3.png}
+    \caption{Grad-CAM visualization during deployment: Real-time heatmap generation in the web application showing model attention on disease-affected regions.}
+\end{figure}
+
+\section*{System Features and User Interface}
+
+\subsection*{Interactive Web Interface}
+
+\textbf{Design Philosophy:} Dark green gradient theme (agricultural context), professional typography (Inter + Space Grotesk), responsive layout (desktop/tablet/mobile).
+
+\textbf{Key Components:}
+\begin{itemize}
+    \item \textbf{Upload Area:} Drag-and-drop file selection with validation
+    \item \textbf{Enhancement Selector:} 8 options (none + 6 methods + comparison mode)
+    \item \textbf{Dynamic Tips:} Algorithm explanations update on selection
+    \item \textbf{Preview Section:} Shows uploaded image before analysis
+    \item \textbf{Results Display:} Two modes (single enhancement vs. comparison grid)
+\end{itemize}
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/sequential_input.png}
+        \caption{Input Image}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{images/sequential_result.png}
+        \caption{Processed Result}
+    \end{subfigure}
+    \caption{Interface demonstration showing the transformation from input to result using sequential filter application. The sequential preprocessing pipeline achieved 80.2\% accuracy during testing on degraded images.}
+\end{figure}
+
+\subsection*{Expected Answer Validation}
+
+AgriVision supports filename-based ground truth extraction for automated testing. Filenames following the pattern \texttt{DiseaseName\_\_degradation.jpg} enable:
+
+\begin{itemize}
+    \item \textbf{Automatic parsing:} "TomatoYellowCurlVirus6\_\_heavy\_noise.jpg" $\rightarrow$ "Tomato Yellow Curl Virus"
+    \item \textbf{Word-based matching:} 70\% word overlap threshold handles shortened filenames
+    \item \textbf{Visual feedback:} Green "Expected Answer" banner + wrong prediction warnings
+\end{itemize}
+
+\section*{Future Work}
+
+The following enhancements are planned for subsequent iterations of AgriVision:
+
+\subsection*{Advanced Preprocessing Algorithms}
+
+\textbf{1. Unsharp Masking}
+\begin{itemize}
+    \item \textbf{Purpose:} Edge enhancement via high-frequency amplification
+    \item $I_{\text{sharp}} = I + \alpha (I - I_{\text{blur}})$ where $\alpha$ controls sharpness
+    \item \textbf{Use Case:} Slightly out-of-focus images with mild blur
+\end{itemize}
+
+\textbf{2. Bilateral Filtering}
+\begin{itemize}
+    \item \textbf{Purpose:} Edge-preserving noise reduction
+    \item Weighted average considering both spatial and intensity similarity
+    \item \textbf{Use Case:} Gaussian noise removal while maintaining disease boundary sharpness
+\end{itemize}
+
+\section*{Conclusion}
+
+AgriVision successfully demonstrates the synergistic integration of eight classical image processing techniques\citeref{4} with modern deep learning\citeref{5} for agricultural disease classification. The system achieves 97.8\% validation accuracy on 38-class plant disease classification using MobileNetV2 transfer learning\citeref{2}. The comprehensive enhancement suite, including six spatial/frequency domain algorithms, TTA, and quality assessment, provides up to 48\% accuracy improvement on degraded images.
+
+The experimental results validate that \textit{no single enhancement method is universally optimal}. Shadow removal excels on illumination issues but harms clean images, while median filtering eliminates salt-and-pepper noise but blurs fine details. The intelligent recommendation system prevents misuse of preprocessing techniques, ensuring that high-confidence predictions are not degraded by unnecessary processing.
+
+This project validates that classical image processing techniques remain highly relevant in the deep learning era. Rather than being obsoleted by neural networks, preprocessing serves as a critical enabler that enhances model robustness and generalization. By providing an interactive platform with real-time feedback, comparison visualizations, and intelligent recommendations, AgriVision demonstrates that effective AI systems require synthesis of multiple disciplines: signal processing, machine learning, software engineering, and domain expertise.
+
+\section*{References}
+
+\begin{enumerate}
+    \item \label{ref:1} Hughes, D., \& Salathé, M. (2015). An open access repository of images on plant health to enable the development of mobile disease diagnostics. \textit{arXiv preprint arXiv:1511.08060}.
+    
+    \item \label{ref:2} Sandler, M., et al. (2018). MobileNetV2: Inverted residuals and linear bottlenecks. \textit{IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}, 4510-4520.
+    
+    \item \label{ref:3} Mohanty, S. P., et al. (2016). Using deep learning for image-based plant disease detection. \textit{Frontiers in Plant Science}, 7, 1419.
+    
+    \item \label{ref:4} Gonzalez, R. C., \& Woods, R. E. (2018). \textit{Digital Image Processing} (4th ed.). Pearson Education.
+    
+    \item \label{ref:5} Kumar, A., et al. (2024). Deep learning approaches for plant disease detection: A comprehensive review. \textit{arXiv preprint arXiv:2404.16833v1}.
+    
+    \item \label{ref:6} Singh, V., \& Misra, A. K. (2024). Image preprocessing techniques for plant disease detection. \textit{Smart Agricultural Technology}, Article S2772375524000856.
+    
+    \item \label{ref:7} Pizer, S. M., et al. (1987). Adaptive histogram equalization and its variations. \textit{Computer Vision, Graphics, and Image Processing}, 39(3), 355-368.
+\end{enumerate}
+
+\end{document}
